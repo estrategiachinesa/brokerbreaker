@@ -1,0 +1,11 @@
+{
+  "name": "Broker Breaker V2",
+  "description": "Broker Breaker V2 - Sistema de Bug de Ativação",
+  "requestFramePermissions": [
+    "clipboard-read",
+    "clipboard-write"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
