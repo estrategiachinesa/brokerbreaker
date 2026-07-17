@@ -1,5 +1,5 @@
 {
-  "name": "Broker Breaker V2",
+  "name": "Broker Breaker",
   "description": "Broker Breaker V2 - Sistema de Bug de Ativação",
   "requestFramePermissions": [
     "clipboard-read",
