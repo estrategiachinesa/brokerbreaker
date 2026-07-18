@@ -1,13 +1,50 @@
-import { initializeApp, getApp, getApps } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
-
-// Avoid re-initializing firebase app if it's already initialized (important in serverless environments!)
-const appInstance = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const db = getFirestore(appInstance, firebaseConfig.firestoreDatabaseId);
 
 const TELEGRAM_BOT_TOKEN = "8936249204:AAHLPkYRW2kHmLvLqU9R1VvjpNFNgOisl8Q";
 const ADMIN_CHAT_ID = "5328007859";
+
+const PROJECT_ID = firebaseConfig.projectId;
+const DATABASE_ID = firebaseConfig.firestoreDatabaseId || "(default)";
+
+// Firestore REST Helper: Fetch document
+async function getFirestoreDoc(collection: string, documentId: string): Promise<any | null> {
+  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${documentId}?key=${firebaseConfig.apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error(`Firestore REST GET error: ${res.statusText} (${res.status})`);
+  }
+  return await res.json();
+}
+
+// Firestore REST Helper: Set document (PATCH creates if it doesn't exist)
+async function setFirestoreDoc(collection: string, documentId: string, fields: Record<string, any>): Promise<any> {
+  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${documentId}?key=${firebaseConfig.apiKey}`;
+  
+  // Convert JS object properties to Firestore REST format
+  const formattedFields: Record<string, any> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (typeof value === "boolean") {
+      formattedFields[key] = { booleanValue: value };
+    } else if (typeof value === "number") {
+      formattedFields[key] = { doubleValue: value };
+    } else {
+      formattedFields[key] = { stringValue: String(value) };
+    }
+  }
+
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: formattedFields })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Firestore REST PATCH error: ${res.statusText} (${res.status}) - ${errText}`);
+  }
+  return await res.json();
+}
 
 export interface BotConfig {
   iq_link: string;
@@ -31,23 +68,22 @@ export const DEFAULT_CONFIG: BotConfig = {
 
 export async function getBotConfig(): Promise<BotConfig> {
   try {
-    const docRef = doc(db, "system_settings", "telegram_bot");
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
+    const docData = await getFirestoreDoc("system_settings", "telegram_bot");
+    if (docData && docData.fields) {
+      const f = docData.fields;
       return {
-        iq_link: data.iq_link || DEFAULT_CONFIG.iq_link,
-        exnova_link: data.exnova_link || DEFAULT_CONFIG.exnova_link,
-        welcome_msg: data.welcome_msg || DEFAULT_CONFIG.welcome_msg,
-        approved_msg: data.approved_msg || DEFAULT_CONFIG.approved_msg,
-        rejected_msg: data.rejected_msg || DEFAULT_CONFIG.rejected_msg,
-        pending_msg: data.pending_msg || DEFAULT_CONFIG.pending_msg,
-        bot_token: data.bot_token || undefined,
-        admin_chat_id: data.admin_chat_id || undefined,
+        iq_link: f.iq_link?.stringValue || DEFAULT_CONFIG.iq_link,
+        exnova_link: f.exnova_link?.stringValue || DEFAULT_CONFIG.exnova_link,
+        welcome_msg: f.welcome_msg?.stringValue || DEFAULT_CONFIG.welcome_msg,
+        approved_msg: f.approved_msg?.stringValue || DEFAULT_CONFIG.approved_msg,
+        rejected_msg: f.rejected_msg?.stringValue || DEFAULT_CONFIG.rejected_msg,
+        pending_msg: f.pending_msg?.stringValue || DEFAULT_CONFIG.pending_msg,
+        bot_token: f.bot_token?.stringValue || undefined,
+        admin_chat_id: f.admin_chat_id?.stringValue || undefined,
       };
     }
   } catch (err) {
-    console.error("Error reading bot config from Firestore:", err);
+    console.error("Error reading bot config from Firestore REST:", err);
   }
   return DEFAULT_CONFIG;
 }
@@ -129,10 +165,17 @@ export async function registerTelegramWebhook(host: string): Promise<{ success: 
     
     // Create webhook target URL
     const webhookUrl = `https://${host}/api/telegram-webhook`;
-    const setUrl = `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+    const setUrl = `https://api.telegram.org/bot${token}/setWebhook`;
     
     console.log(`Setting Telegram Webhook to: ${webhookUrl}`);
-    const response = await fetch(setUrl);
+    const response = await fetch(setUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ["message", "callback_query"]
+      })
+    });
     const resData = await response.json();
     console.log("setWebhook Response:", resData);
     
@@ -220,9 +263,9 @@ export async function processTelegramUpdate(update: any) {
 
         if (action === "approve" || action === "appIQ" || action === "appEX") {
           const broker = action === "appEX" ? "Exnova" : "IQ Option";
-          // Add to Firestore database!
+          // Add to Firestore database via REST API!
           try {
-            await setDoc(doc(db, "approved_ids", userId), {
+            await setFirestoreDoc("approved_ids", userId, {
               active: false,
               broker: broker,
               createdAt: new Date().toISOString()
