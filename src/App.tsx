@@ -32,7 +32,6 @@ import AdminPanelModal from './components/AdminPanelModal';
 import TypewriterText from './components/TypewriterText';
 import LgpdModal from './components/LgpdModal';
 import LgpdBanner from './components/LgpdBanner';
-import QuadcodeOauthModal from './components/QuadcodeOauthModal';
 import { BrokerType, AppState } from './types';
 import { HudButton } from './components/ui/hud-button';
 import { HyperText } from './components/ui/hyper-text';
@@ -102,17 +101,6 @@ export default function App() {
   const [showDepositInstructionModal, setShowDepositInstructionModal] = useState<boolean>(false);
   const [showLgpdModal, setShowLgpdModal] = useState<boolean>(false);
   const [lgpdAccepted, setLgpdAccepted] = useState<boolean>(() => localStorage.getItem('lgpd-consent-v2') === 'true');
-  const [showOauthModal, setShowOauthModal] = useState<boolean>(false);
-
-  const handleOauthSuccess = (userId: string) => {
-    updateAppState({
-      userId,
-      isUserIdVerified: true,
-      currentStep: 3,
-    });
-    setVerificationError(false);
-    scrollToSlide(2);
-  };
 
   // Prevent inspection of the project (disable right-click, F12, developer tools key combinations)
   useEffect(() => {
@@ -814,18 +802,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {!state.isUserIdVerified && (
-                        <button
-                          type="button"
-                          onClick={() => setShowOauthModal(true)}
-                          disabled={state.currentStep < 2 || isVerifying}
-                          className="w-full bg-gradient-to-r from-emerald-600/10 to-teal-600/10 hover:from-emerald-600/20 hover:to-teal-600/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 hover:text-emerald-300 font-mono text-[9px] font-extrabold py-2 px-3 rounded-xl uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
-                        >
-                          <Globe size={11} className="animate-spin-slow text-emerald-400" />
-                          <span>Autenticação OAuth Oficial (Quadcode)</span>
-                        </button>
-                      )}
-
                       {state.isUserIdVerified ? (
                         <div className="w-full py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-1.5 uppercase font-bold tracking-wider">
                           <ShieldCheck size={12} className="text-emerald-400 animate-pulse" />
@@ -1403,18 +1379,6 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-
-                    {!state.isUserIdVerified && (
-                      <button
-                        type="button"
-                        onClick={() => setShowOauthModal(true)}
-                        disabled={isVerifying}
-                        className="w-full bg-gradient-to-r from-emerald-600/10 to-teal-600/10 hover:from-emerald-600/20 hover:to-teal-600/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 hover:text-emerald-300 font-mono text-[9px] font-extrabold py-2 px-3 rounded-xl uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        <Globe size={11} className="animate-spin-slow text-emerald-400" />
-                        <span>Autenticação OAuth Oficial (Quadcode)</span>
-                      </button>
-                    )}
 
                     {state.isUserIdVerified ? (
                       <div className="py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-2 uppercase font-bold tracking-wider">
@@ -2026,14 +1990,6 @@ export default function App() {
 
       <LgpdBanner 
         onAccept={() => setLgpdAccepted(true)}
-      />
-
-      {/* Quadcode OAuth Flow Modal (Pages 2, 3, 4, 5, 6 spec) */}
-      <QuadcodeOauthModal
-        isOpen={showOauthModal}
-        onClose={() => setShowOauthModal(false)}
-        broker={state.broker}
-        onSuccess={handleOauthSuccess}
       />
     </div>
   );
