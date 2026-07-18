@@ -56,6 +56,8 @@ async function getBotConfig(): Promise<BotConfig> {
 
 let pollingActive = false;
 let lastUpdateId = 0;
+let currentConfiguredHost = "";
+let webhookRegisteredUrl = "";
 
 async function sendTelegramMessage(chatId: string | number, text: string, replyMarkup?: any) {
   try {
@@ -283,6 +285,74 @@ async function startTelegramPolling() {
   }
 }
 
+async function configureTelegramBot(host: string) {
+  if (host === currentConfiguredHost) return;
+
+  const isLocal = host.includes("localhost") || host.includes("127.0.0.1") || host.includes("0.0.0.0") || host.includes("192.168.");
+
+  try {
+    const config = await getBotConfig();
+    const token = config.bot_token || TELEGRAM_BOT_TOKEN;
+    if (!token) {
+      console.log("No bot token configured, skipping bot setup.");
+      return;
+    }
+
+    if (isLocal) {
+      // Local development: use long-polling
+      console.log(`Local development detected (${host}). Setting up Long Polling...`);
+      currentConfiguredHost = host;
+      webhookRegisteredUrl = "";
+
+      // Stop webhook first so polling can work
+      const delUrl = `https://api.telegram.org/bot${token}/deleteWebhook`;
+      const delRes = await fetch(delUrl);
+      const delData = await delRes.json();
+      console.log("deleteWebhook response on local start:", delData);
+
+      // Start polling
+      if (!pollingActive) {
+        startTelegramPolling();
+      }
+    } else {
+      // Production / Cloud Run: use Webhook
+      const targetUrl = `https://${host}/api/telegram-webhook`;
+      console.log(`Production environment detected (${host}). Setting up Webhook -> ${targetUrl}`);
+      currentConfiguredHost = host;
+
+      // Stop polling loop if active
+      if (pollingActive) {
+        console.log("Stopping long polling in favor of active Webhook...");
+        pollingActive = false;
+      }
+
+      const setUrl = `https://api.telegram.org/bot${token}/setWebhook`;
+      const setRes = await fetch(setUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          allowed_updates: ["message", "callback_query"]
+        })
+      });
+      const setData = await setRes.json();
+      console.log("setWebhook response on prod start:", setData);
+
+      if (setData.ok) {
+        webhookRegisteredUrl = targetUrl;
+        console.log(`Telegram Webhook successfully set to: ${targetUrl}`);
+      } else {
+        console.error("Failed to set Telegram Webhook:", setData);
+        currentConfiguredHost = ""; // reset on failure to retry
+      }
+    }
+  } catch (err) {
+    console.error("Error configuring Telegram Bot:", err);
+    // Reset so it tries again on next request
+    currentConfiguredHost = "";
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -290,16 +360,47 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Dummy endpoints for backwards compatibility / health checking
-  app.get("/api/setup-telegram-webhook", (req, res) => {
-    res.json({ success: true, message: "Long polling is active, webhooks disabled for maximum reliability" });
+  // Auto-configure Webhook/Long Polling depending on current Host
+  app.use((req, res, next) => {
+    const host = req.get("host");
+    if (host) {
+      configureTelegramBot(host).catch((err) => console.error("Error in auto-configure middleware:", err));
+    }
+    next();
+  });
+
+  // Setup endpoint to explicitly trigger or force refresh webhook setup
+  app.get("/api/setup-telegram-webhook", async (req, res) => {
+    const host = req.get("host");
+    if (host) {
+      try {
+        currentConfiguredHost = ""; // reset to force configuration
+        await configureTelegramBot(host);
+        res.json({
+          success: true,
+          message: "Telegram Bot configured successfully",
+          host,
+          webhookRegisteredUrl,
+          pollingActive
+        });
+      } catch (err) {
+        res.status(500).json({
+          success: false,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    } else {
+      res.status(400).json({ success: false, error: "No host header found in request" });
+    }
   });
 
   app.get("/api/health", (req, res) => {
     res.json({
       status: "ok",
       pollingActive,
-      lastUpdateId
+      lastUpdateId,
+      webhookRegisteredUrl,
+      currentConfiguredHost
     });
   });
 
