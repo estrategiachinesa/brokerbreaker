@@ -1,4 +1,8 @@
-import firebaseConfig from "../firebase-applet-config.json";
+const firebaseConfig = {
+  projectId: "notional-scheduler-4dpgw",
+  apiKey: "AIzaSyCaiufpdc1ktrS7YIrhnaP7OCGMAfs4Wg8",
+  firestoreDatabaseId: "ai-studio-brokerbreakerv2-d5e9ffbe-23d0-43da-9c0a-165a03d619de"
+};
 
 const TELEGRAM_BOT_TOKEN = "8936249204:AAHLPkYRW2kHmLvLqU9R1VvjpNFNgOisl8Q";
 const ADMIN_CHAT_ID = "5328007859";
