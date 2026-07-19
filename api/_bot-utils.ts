@@ -1,9 +1,17 @@
-import firebaseConfig from "../firebase-applet-config.json";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+let firebaseConfig: any = {};
+try {
+  firebaseConfig = require("../firebase-applet-config.json");
+} catch (err) {
+  console.error("Failed to load firebase-applet-config.json via require:", err);
+}
 
 const TELEGRAM_BOT_TOKEN = "8936249204:AAHLPkYRW2kHmLvLqU9R1VvjpNFNgOisl8Q";
 const ADMIN_CHAT_ID = "5328007859";
 
-const PROJECT_ID = firebaseConfig.projectId;
+const PROJECT_ID = firebaseConfig.projectId || "";
 const DATABASE_ID = firebaseConfig.firestoreDatabaseId || "(default)";
 
 // Firestore REST Helper: Fetch document
