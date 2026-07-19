@@ -1,11 +1,51 @@
-import { createRequire } from "module";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-const require = createRequire(import.meta.url);
 let firebaseConfig: any = {};
+
+// Safe retrieval of current directory to support both CommonJS and ES Modules
+let currentDir = "";
 try {
-  firebaseConfig = require("../firebase-applet-config.json");
+  if (typeof __dirname !== "undefined") {
+    currentDir = __dirname;
+  }
+} catch (e) {}
+
+try {
+  if (typeof import.meta !== "undefined" && import.meta.url) {
+    const url = new URL(import.meta.url);
+    if (url.protocol === "file:") {
+      currentDir = url.pathname.substring(0, url.pathname.lastIndexOf("/"));
+    }
+  }
+} catch (e) {}
+
+try {
+  const pathsToTry = [
+    join(process.cwd(), "firebase-applet-config.json"),
+    join(process.cwd(), "..", "firebase-applet-config.json")
+  ];
+  if (currentDir) {
+    pathsToTry.push(join(currentDir, "firebase-applet-config.json"));
+    pathsToTry.push(join(currentDir, "..", "firebase-applet-config.json"));
+    pathsToTry.push(join(currentDir, "../..", "firebase-applet-config.json"));
+  }
+
+  let fileContent = "";
+  for (const p of pathsToTry) {
+    try {
+      fileContent = readFileSync(p, "utf8");
+      if (fileContent) {
+        firebaseConfig = JSON.parse(fileContent);
+        console.log("Successfully loaded firebase-applet-config.json from:", p);
+        break;
+      }
+    } catch (e) {
+      // Continue trying
+    }
+  }
 } catch (err) {
-  console.error("Failed to load firebase-applet-config.json via require:", err);
+  console.error("General error trying to resolve firebase-applet-config.json:", err);
 }
 
 const TELEGRAM_BOT_TOKEN = "8936249204:AAHLPkYRW2kHmLvLqU9R1VvjpNFNgOisl8Q";
