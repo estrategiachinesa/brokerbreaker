@@ -655,28 +655,27 @@ export default function App() {
       <MatrixBackground />
 
       {/* Top Navigation Bar */}
-      <nav className="relative z-10 w-full h-16 border-b border-emerald-500/20 bg-black/40 backdrop-blur-md flex items-center justify-between px-8">
+      <nav className="relative z-10 w-full h-16 border-b border-emerald-500/20 bg-black/40 backdrop-blur-md flex items-center justify-between px-4 sm:px-8">
         <div 
-          className="flex items-center gap-3 select-none"
+          className="flex items-center gap-2 sm:gap-3 select-none shrink-0"
         >
           <img 
             src="https://64.media.tumblr.com/11f058fe144ce123bce7ebc066aac0d7/3c05f9bac0de956e-a0/s540x810/bfa258e1585d5be83edc8e0cb5d3df21c5b7648f.pnj"
             alt="Logo"
             referrerPolicy="no-referrer"
-            className="h-10 w-10 object-contain rounded-md"
+            className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-md shrink-0"
           />
-          <span className="text-xl font-display font-extrabold tracking-widest text-emerald-400 uppercase italic flex items-center">
-            <HyperText text="Broker Breaker" className="text-xl font-display font-extrabold tracking-widest text-emerald-400 uppercase italic" duration={1000} />
+          <span className="text-xs sm:text-base md:text-xl font-display font-extrabold tracking-wider sm:tracking-widest text-emerald-400 uppercase italic flex items-center shrink-0">
+            <HyperText text="Broker Breaker" className="text-xs sm:text-base md:text-xl font-display font-extrabold tracking-wider sm:tracking-widest text-emerald-400 uppercase italic" duration={1000} />
           </span>
         </div>
 
         {/* User profile details */}
-        <div className="flex items-center gap-4 relative z-20">
-
+        <div className="flex items-center gap-2 sm:gap-4 relative z-20 shrink-0">
           <div className="flex flex-col text-right">
-            <div className="text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1 justify-end">
+            <div className="text-[9px] sm:text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1.5 justify-end whitespace-nowrap">
               <span 
-                className={`h-2 w-2 rounded-full ${getIndicatorClass()} ${
+                className={`h-2 w-2 rounded-full shrink-0 ${getIndicatorClass()} ${
                   enableSecretShortcut && state.isUserIdVerified ? 'cursor-default' : ''
                 }`}
                 onMouseDown={handleIndicatorStart}
@@ -685,7 +684,7 @@ export default function App() {
                 onTouchStart={handleIndicatorStart}
                 onTouchEnd={handleIndicatorEnd}
               ></span>
-              <span className="uppercase text-[10px] tracking-widest font-black">
+              <span className="uppercase text-[9px] sm:text-[10px] tracking-wider sm:tracking-widest font-black whitespace-nowrap">
                 {isSystemActive ? 'SISTEMA ATIVO' : 'SISTEMA INATIVO'}
               </span>
             </div>
