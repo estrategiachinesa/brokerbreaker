@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { 
   X, 
   Lock, 
@@ -17,7 +17,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  Copy
+  Copy,
+  Star
 } from 'lucide-react';
 import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -25,7 +26,8 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 interface ApprovedId {
   id: string;
   active: boolean;
-  broker: 'IQ Option' | 'Exnova';
+  broker: string;
+  favorite?: boolean;
 }
 
 interface AdminPanelModalProps {
@@ -55,6 +57,32 @@ export default function AdminPanelModal({
   const [newId, setNewId] = useState('');
   const [newBroker, setNewBroker] = useState<'IQ Option' | 'Exnova'>('IQ Option');
   const [approvedIds, setApprovedIds] = useState<ApprovedId[]>([]);
+  const [idSearchQuery, setIdSearchQuery] = useState('');
+  const [selectedBrokerFilter, setSelectedBrokerFilter] = useState('Todas');
+  const [showDisableAllConfirm, setShowDisableAllConfirm] = useState(false);
+
+  // Dynamic list of unique brokers
+  const uniqueBrokers = useMemo(() => {
+    const brokers = new Set<string>();
+    approvedIds.forEach(item => {
+      if (item.broker) {
+        brokers.add(item.broker);
+      }
+    });
+    return Array.from(brokers).sort();
+  }, [approvedIds]);
+
+  // Filtered and searched IDs
+  const filteredApprovedIds = useMemo(() => {
+    return approvedIds.filter((item) => {
+      const matchesSearch = item.id.toLowerCase().includes(idSearchQuery.trim().toLowerCase());
+      const matchesBroker =
+        selectedBrokerFilter === 'Todas' ||
+        (selectedBrokerFilter === 'Favoritos' && item.favorite) ||
+        item.broker === selectedBrokerFilter;
+      return matchesSearch && matchesBroker;
+    });
+  }, [approvedIds, idSearchQuery, selectedBrokerFilter]);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -139,6 +167,15 @@ export default function AdminPanelModal({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (showDisableAllConfirm) {
+      const timer = setTimeout(() => {
+        setShowDisableAllConfirm(false);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [showDisableAllConfirm]);
+
   // Load approved IDs on authentication
   useEffect(() => {
     if (isOpen && isAuthenticated) {
@@ -154,6 +191,7 @@ export default function AdminPanelModal({
               id: docSnap.id,
               active: data.active !== false,
               broker: data.broker || 'IQ Option',
+              favorite: data.favorite === true,
             });
           });
 
@@ -272,6 +310,77 @@ export default function AdminPanelModal({
     }
   };
 
+  const handleDisableAll = async () => {
+    // If not in confirm state, switch to confirm state
+    if (!showDisableAllConfirm) {
+      setShowDisableAllConfirm(true);
+      return;
+    }
+
+    const activeIds = approvedIds.filter(item => item.active);
+    if (activeIds.length === 0) {
+      setErrorMessage('Todos os IDs já estão desativados.');
+      setTimeout(() => setErrorMessage(''), 3000);
+      setShowDisableAllConfirm(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    setShowDisableAllConfirm(false);
+
+    const originalList = [...approvedIds];
+    // Optimistic UI update
+    setApprovedIds(prev => prev.map(item => ({ ...item, active: false })));
+
+    try {
+      const promises = activeIds.map(item => 
+        updateDoc(doc(db, 'approved_ids', item.id), { active: false })
+      );
+      await Promise.all(promises);
+      setSuccessMessage('Todos os IDs foram desativados com sucesso!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error disabling all IDs in Firestore:', error);
+      // Revert optimistic UI
+      setApprovedIds(originalList);
+      try {
+        handleFirestoreError(error, OperationType.UPDATE, 'approved_ids/all');
+      } catch (e) {
+        setErrorMessage('Erro ao desativar todos os IDs.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleFavorite = async (idToToggle: string) => {
+    const matchedItem = approvedIds.find(item => item.id === idToToggle);
+    if (!matchedItem) return;
+
+    const newFavorite = !matchedItem.favorite;
+
+    // Optimistic UI update
+    setApprovedIds(prev => prev.map(item => 
+      item.id === idToToggle ? { ...item, favorite: newFavorite } : item
+    ));
+
+    try {
+      await updateDoc(doc(db, 'approved_ids', idToToggle), {
+        favorite: newFavorite
+      });
+    } catch (error) {
+      console.error('Error updating ID favorite state in Firestore:', error);
+      // Revert optimistic UI
+      setApprovedIds(prev => prev.map(item => 
+        item.id === idToToggle ? { ...item, favorite: !newFavorite } : item
+      ));
+      setErrorMessage('Erro ao atualizar favoritos.');
+      setTimeout(() => setErrorMessage(''), 3000);
+    }
+  };
+
   const handleRemoveId = async (idToRemove: string) => {
     const originalList = [...approvedIds];
     // Optimistic UI update
@@ -372,15 +481,17 @@ export default function AdminPanelModal({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-      <div className={`relative w-full ${isAuthenticated ? 'max-w-xl' : 'max-w-md'} bg-black border-2 border-emerald-500/40 rounded-2xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.15)] overflow-hidden transition-all duration-300`}>
+      <div className={`relative w-full ${isAuthenticated ? 'max-w-xl' : 'max-w-md'} max-h-[90vh] flex flex-col bg-black border-2 border-emerald-500/40 rounded-2xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.15)] overflow-hidden transition-all duration-300`}>
         
         {/* Aesthetic scanline effect */}
         <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(to_bottom,rgba(255,255,255,0),rgba(255,255,255,0)_50%,rgba(0,0,0,0.3)_50%,rgba(0,0,0,0.3))] bg-[length:100%_4px]"></div>
 
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-emerald-900/40 mb-6 relative z-10">
+        <div className="flex items-center justify-between pb-4 border-b border-emerald-900/40 mb-6 relative z-10 shrink-0">
           <div className="flex items-center gap-2">
             <Database className="text-emerald-400 w-5 h-5 animate-pulse" />
             <h3 className="font-display font-extrabold text-sm tracking-wider text-emerald-400 uppercase">
@@ -396,7 +507,7 @@ export default function AdminPanelModal({
         </div>
 
         {/* Content */}
-        <div className="relative z-10">
+        <div className="relative z-10 flex-1 overflow-y-auto pr-1">
           {!isAuthenticated ? (
             /* Admin Password Prompt */
             <form onSubmit={handleLogin} className="space-y-4">
@@ -651,15 +762,87 @@ export default function AdminPanelModal({
                   )}
 
                   {/* ID List */}
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <label className="text-[10px] font-mono font-bold text-emerald-500/60 uppercase">IDs Liberados ({approvedIds.length})</label>
-                      <button
-                        onClick={handleLogoutAdmin}
-                        className="text-[9px] font-mono text-red-400/70 hover:text-red-400 uppercase tracking-wider"
-                      >
-                        Desconectar Painel
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleDisableAll}
+                          disabled={approvedIds.filter(x => x.active).length === 0}
+                          className={`text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                            showDisableAllConfirm
+                              ? 'bg-red-500 text-black border-red-500 font-extrabold shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse'
+                              : 'bg-black/60 text-red-500 border-red-950/40 hover:text-red-400 hover:border-red-500/30 hover:bg-red-950/20 disabled:opacity-30 disabled:pointer-events-none'
+                          }`}
+                          title="Desliga todos os IDs que estão ativos"
+                        >
+                          {showDisableAllConfirm ? 'CONFIRMAR DESLIGAR?' : 'Desligar Todos'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleLogoutAdmin}
+                          className="text-[9px] font-mono text-red-400/70 hover:text-red-400 uppercase tracking-wider"
+                        >
+                          Desconectar Painel
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter and Search Box */}
+                    <div className="space-y-2 bg-emerald-950/5 border border-emerald-950/40 p-2.5 rounded-xl">
+                      {/* Search Input */}
+                      <input
+                        type="text"
+                        placeholder="🔍 BUSCAR POR ID..."
+                        value={idSearchQuery}
+                        onChange={(e) => setIdSearchQuery(e.target.value)}
+                        className="w-full bg-black/80 text-emerald-400 border border-emerald-950 rounded-lg px-3 py-1.5 text-xs font-mono placeholder:text-emerald-950/60 focus:outline-none focus:border-emerald-500/50"
+                      />
+
+                      {/* Broker Selector Pills */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 scrollbar-thin select-none max-w-full">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBrokerFilter('Todas')}
+                          className={`text-[9px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap ${
+                            selectedBrokerFilter === 'Todas'
+                              ? 'bg-emerald-500 text-black font-black border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                              : 'bg-black/60 text-emerald-500/60 border-emerald-950 hover:text-emerald-400 hover:border-emerald-500/30'
+                          }`}
+                        >
+                          TODAS ({approvedIds.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBrokerFilter('Favoritos')}
+                          className={`text-[9px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                            selectedBrokerFilter === 'Favoritos'
+                              ? 'bg-amber-500 text-black font-black border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                              : 'bg-black/60 text-amber-500/60 border-amber-950 hover:text-amber-400 hover:border-amber-500/30'
+                          }`}
+                        >
+                          ★ FAVORITOS ({approvedIds.filter(x => x.favorite).length})
+                        </button>
+                        {uniqueBrokers.map((broker) => {
+                          const count = approvedIds.filter(x => x.broker === broker).length;
+                          return (
+                            <button
+                              key={broker}
+                              type="button"
+                              onClick={() => setSelectedBrokerFilter(broker)}
+                              className={`text-[9px] font-mono px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap ${
+                                selectedBrokerFilter === broker
+                                  ? 'bg-emerald-500 text-black font-black border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                                  : 'bg-black/60 text-emerald-500/60 border-emerald-950 hover:text-emerald-400 hover:border-emerald-500/30'
+                              }`}
+                            >
+                              {broker.toUpperCase()} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="max-h-[180px] overflow-y-auto border border-emerald-950 rounded-xl bg-black divide-y divide-emerald-950/30 scrollbar-thin">
@@ -668,33 +851,46 @@ export default function AdminPanelModal({
                           <Loader2 size={16} className="animate-spin text-emerald-400" />
                           <span>Sincronizando Firestore...</span>
                         </div>
-                      ) : approvedIds.length === 0 ? (
+                      ) : filteredApprovedIds.length === 0 ? (
                         <div className="p-4 text-center font-mono text-xs text-emerald-500/30 italic">
-                          Nenhum ID liberado. Todos falharão na verificação.
+                          {approvedIds.length === 0 ? 'Nenhum ID liberado. Todos falharão na verificação.' : 'Nenhum ID corresponde à busca ou filtro.'}
                         </div>
                       ) : (
-                        approvedIds.map((item) => (
+                        filteredApprovedIds.map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 hover:bg-emerald-950/10 transition-colors">
-                            <div 
-                              onClick={() => handleCopyId(item.id)}
-                              className="flex flex-col cursor-pointer group select-none"
-                              title="Clique para copiar o ID"
-                            >
-                              <span className="font-mono text-xs text-emerald-400 font-bold tracking-wider flex items-center gap-1.5 group-hover:text-emerald-300 transition-colors">
-                                <span>ID: {item.id}</span>
-                                {copiedId === item.id ? (
-                                  <span className="text-[8px] bg-emerald-500 text-black px-1 rounded font-sans uppercase font-extrabold tracking-tight animate-bounce">Copiado!</span>
-                                ) : (
-                                  <Copy size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500/70" />
-                                )}
-                              </span>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[9px] font-mono px-1 py-0.2 bg-emerald-950 border border-emerald-500/30 rounded text-emerald-400 uppercase font-black">
-                                  {item.broker}
+                            <div className="flex items-center gap-3">
+                              {/* Star icon for favorites */}
+                              <button
+                                onClick={() => handleToggleFavorite(item.id)}
+                                className={`p-1 hover:bg-amber-500/10 rounded transition-colors cursor-pointer ${
+                                  item.favorite ? 'text-amber-400' : 'text-emerald-500/20 hover:text-amber-400/50'
+                                }`}
+                                title={item.favorite ? "Remover dos Favoritos" : "Adicionar aos Favoritos"}
+                              >
+                                <Star size={14} fill={item.favorite ? "currentColor" : "none"} />
+                              </button>
+
+                              <div 
+                                onClick={() => handleCopyId(item.id)}
+                                className="flex flex-col cursor-pointer group select-none"
+                                title="Clique para copiar o ID"
+                              >
+                                <span className="font-mono text-xs text-emerald-400 font-bold tracking-wider flex items-center gap-1.5 group-hover:text-emerald-300 transition-colors">
+                                  <span>ID: {item.id}</span>
+                                  {copiedId === item.id ? (
+                                    <span className="text-[8px] bg-emerald-500 text-black px-1 rounded font-sans uppercase font-extrabold tracking-tight animate-bounce">Copiado!</span>
+                                  ) : (
+                                    <Copy size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500/70" />
+                                  )}
                                 </span>
-                                <span className={`text-[9px] font-mono font-semibold ${item.active ? 'text-emerald-500' : 'text-red-400/80'}`}>
-                                  {item.active ? '● ATIVO' : '○ BLOQUEADO'}
-                                </span>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] font-mono px-1 py-0.2 bg-emerald-950 border border-emerald-500/30 rounded text-emerald-400 uppercase font-black">
+                                    {item.broker}
+                                  </span>
+                                  <span className={`text-[9px] font-mono font-semibold ${item.active ? 'text-emerald-500' : 'text-red-400/80'}`}>
+                                    {item.active ? '● ATIVO' : '○ BLOQUEADO'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
