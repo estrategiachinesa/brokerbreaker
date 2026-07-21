@@ -291,6 +291,7 @@ export default function App() {
         if (data.iq_link) setIqLink(data.iq_link);
         if (data.exnova_link) setExnovaLink(data.exnova_link);
         if (data.enable_secret_shortcut !== undefined) setEnableSecretShortcut(data.enable_secret_shortcut);
+        if (data.is_system_active !== undefined) setIsSystemActive(data.is_system_active);
         if (data.is_deposit_flexible !== undefined) {
           setIsDepositFlexible(data.is_deposit_flexible);
           if (!data.is_deposit_flexible) {
@@ -323,12 +324,16 @@ export default function App() {
     }
   });
 
-  const handleToggleSystemActive = (active: boolean) => {
+  const handleToggleSystemActive = async (active: boolean) => {
     setIsSystemActive(active);
     try {
       localStorage.setItem('broker_breaker_system_active', String(active));
+      const docRef = doc(db, 'system_settings', 'telegram_bot');
+      await updateDoc(docRef, {
+        is_system_active: active
+      });
     } catch (e) {
-      console.error('Error saving system status', e);
+      console.error('Error saving system status to Firestore', e);
     }
   };
 
