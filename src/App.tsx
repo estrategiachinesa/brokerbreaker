@@ -79,6 +79,33 @@ export default function App() {
   // Verification Logs for Step 2
   const [verificationLogs, setVerificationLogs] = useState<string[]>([]);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+
+  const handleCopyId = async () => {
+    if (!state.userId) return;
+    try {
+      await navigator.clipboard.writeText(state.userId);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy using clipboard API, trying fallback...', err);
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = state.userId;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 2000);
+      } catch (e) {
+        console.error('Fallback copy failed:', e);
+      }
+    }
+  };
+
   const [verificationError, setVerificationError] = useState(false);
   const [exploitError, setExploitError] = useState<string | null>(null);
   const [showUserId, setShowUserId] = useState(false);
@@ -803,9 +830,22 @@ export default function App() {
                       </div>
 
                       {state.isUserIdVerified ? (
-                        <div className="w-full py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-1.5 uppercase font-bold tracking-wider">
-                          <ShieldCheck size={12} className="text-emerald-400 animate-pulse" />
-                          <span>CONECTADO: {showUserId ? state.userId : "•".repeat(state.userId.length)}</span>
+                        <div 
+                          onClick={handleCopyId}
+                          className="w-full py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-1.5 uppercase font-bold tracking-wider cursor-pointer hover:bg-emerald-500/10 active:scale-95 transition-all select-none"
+                          title="Clique para copiar o ID"
+                        >
+                          {copiedId ? (
+                            <>
+                              <Check size={12} className="text-emerald-400 animate-bounce" />
+                              <span>ID COPIADO!</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck size={12} className="text-emerald-400 animate-pulse" />
+                              <span>CONECTADO: {showUserId ? state.userId : "•".repeat(state.userId.length)}</span>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <>
@@ -1381,9 +1421,22 @@ export default function App() {
                     </div>
 
                     {state.isUserIdVerified ? (
-                      <div className="py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-2 uppercase font-bold tracking-wider">
-                        <ShieldCheck size={14} className="text-emerald-400 animate-pulse" />
-                        <span>ID CONECTADO: {showUserId ? state.userId : "•".repeat(state.userId.length)}</span>
+                      <div 
+                        onClick={handleCopyId}
+                        className="py-3 bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 rounded-xl font-mono text-[10px] text-center flex items-center justify-center gap-2 uppercase font-bold tracking-wider cursor-pointer hover:bg-emerald-500/10 active:scale-95 transition-all select-none"
+                        title="Clique para copiar o ID"
+                      >
+                        {copiedId ? (
+                          <>
+                            <Check size={14} className="text-emerald-400 animate-bounce" />
+                            <span>ID COPIADO!</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck size={14} className="text-emerald-400 animate-pulse" />
+                            <span>ID CONECTADO: {showUserId ? state.userId : "•".repeat(state.userId.length)}</span>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <>

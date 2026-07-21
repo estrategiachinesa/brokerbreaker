@@ -16,7 +16,8 @@ import {
   Database,
   Loader2,
   Eye,
-  EyeOff
+  EyeOff,
+  Copy
 } from 'lucide-react';
 import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -58,6 +59,31 @@ export default function AdminPanelModal({
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'ids' | 'telegram' | 'alerts' | 'security'>('ids');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyId = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.warn('Failed to copy using clipboard API, trying fallback...', err);
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = id;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+      } catch (e) {
+        console.error('Fallback copy failed:', e);
+      }
+    }
+  };
 
   // Admin credentials states (load from Firestore with default fallback)
   const [dbUsername, setDbUsername] = useState('chines');
@@ -649,9 +675,18 @@ export default function AdminPanelModal({
                       ) : (
                         approvedIds.map((item) => (
                           <div key={item.id} className="flex items-center justify-between p-3 hover:bg-emerald-950/10 transition-colors">
-                            <div className="flex flex-col">
-                              <span className="font-mono text-xs text-emerald-400 font-bold tracking-wider">
-                                ID: {item.id}
+                            <div 
+                              onClick={() => handleCopyId(item.id)}
+                              className="flex flex-col cursor-pointer group select-none"
+                              title="Clique para copiar o ID"
+                            >
+                              <span className="font-mono text-xs text-emerald-400 font-bold tracking-wider flex items-center gap-1.5 group-hover:text-emerald-300 transition-colors">
+                                <span>ID: {item.id}</span>
+                                {copiedId === item.id ? (
+                                  <span className="text-[8px] bg-emerald-500 text-black px-1 rounded font-sans uppercase font-extrabold tracking-tight animate-bounce">Copiado!</span>
+                                ) : (
+                                  <Copy size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-emerald-500/70" />
+                                )}
                               </span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-[9px] font-mono px-1 py-0.2 bg-emerald-950 border border-emerald-500/30 rounded text-emerald-400 uppercase font-black">
