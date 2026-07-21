@@ -133,37 +133,23 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Auto-configure Webhook/Long Polling depending on current Host
-  app.use((req, res, next) => {
-    const host = req.get("host");
-    if (host) {
-      configureTelegramBot(host).catch((err) => console.error("Error in auto-configure middleware:", err));
-    }
-    next();
-  });
-
-  // Setup endpoint to explicitly trigger or force refresh webhook setup
+  // Setup endpoint to check or force-restart polling setup
   app.get("/api/setup-telegram-webhook", async (req, res) => {
-    const host = req.get("host");
-    if (host) {
-      try {
-        currentConfiguredHost = ""; // reset to force configuration
-        await configureTelegramBot(host);
-        res.json({
-          success: true,
-          message: "Telegram Bot configured successfully",
-          host,
-          webhookRegisteredUrl,
-          pollingActive
-        });
-      } catch (err) {
-        res.status(500).json({
-          success: false,
-          error: err instanceof Error ? err.message : String(err)
-        });
+    try {
+      if (!pollingActive) {
+        startTelegramPolling().catch((err) => console.error("Error starting polling:", err));
       }
-    } else {
-      res.status(400).json({ success: false, error: "No host header found in request" });
+      res.json({
+        success: true,
+        message: "Telegram Bot configured with Continuous Long Polling (Sugestão 1)",
+        pollingActive: true,
+        lastUpdateId
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err instanceof Error ? err.message : String(err)
+      });
     }
   });
 
@@ -172,12 +158,11 @@ async function startServer() {
       status: "ok",
       pollingActive,
       lastUpdateId,
-      webhookRegisteredUrl,
-      currentConfiguredHost
+      botType: "Continuous Long Polling (Sugestão 1)"
     });
   });
 
-  // Keep endpoint but delegate to common update processor if anything sends posts here
+  // Keep endpoint for backward compatibility or direct posts
   app.post("/api/telegram-webhook", async (req, res) => {
     try {
       await processTelegramUpdate(req.body);
@@ -205,7 +190,11 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
-    // Telegram Bot configured dynamically on demand (webhook for production, polling for local)
+    // Start Telegram Bot Long Polling automatically on server boot (Sugestão 1)
+    console.log("Initializing continuous Long Polling on startup...");
+    startTelegramPolling().catch((err) => {
+      console.error("Failed to start Telegram Polling on boot:", err);
+    });
   });
 }
 
