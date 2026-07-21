@@ -32,6 +32,7 @@ import AdminPanelModal from './components/AdminPanelModal';
 import TypewriterText from './components/TypewriterText';
 import LgpdModal from './components/LgpdModal';
 import LgpdBanner from './components/LgpdBanner';
+import AccountWarningModal from './components/AccountWarningModal';
 import { BrokerType, AppState } from './types';
 import { HudButton } from './components/ui/hud-button';
 import { HyperText } from './components/ui/hyper-text';
@@ -128,6 +129,7 @@ export default function App() {
   const [showDepositInstructionModal, setShowDepositInstructionModal] = useState<boolean>(false);
   const [showLgpdModal, setShowLgpdModal] = useState<boolean>(false);
   const [lgpdAccepted, setLgpdAccepted] = useState<boolean>(() => localStorage.getItem('lgpd-consent-v2') === 'true');
+  const [showAccountWarning, setShowAccountWarning] = useState<boolean>(true);
 
   // Prevent inspection of the project (disable right-click, F12, developer tools key combinations)
   useEffect(() => {
@@ -2036,6 +2038,13 @@ export default function App() {
         onToggleSecretShortcut={setEnableSecretShortcut}
         isDepositFlexible={isDepositFlexible}
         onToggleDepositFlexible={handleToggleDepositFlexible}
+      />
+
+      {/* Account Registration Pre-Check Warning Popup */}
+      <AccountWarningModal
+        isOpen={showAccountWarning}
+        onClose={() => setShowAccountWarning(false)}
+        botLink={botLink}
       />
 
       {/* LGPD Compliance Modals and Banner */}
